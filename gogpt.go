@@ -49,7 +49,6 @@ func (c *Context) Post() {
 		SetBody(c.body).
 		Post(c.header.Url)
 	checkErr(err)
-	fmt.Println(res.String())
 	c.content = getContent(res.String())
 	c.appendMessage("assistant", c.content)
 }

@@ -4,14 +4,18 @@ import (
 	"fmt"
 	"github.com/imroc/req/v3"
 	"github.com/tidwall/gjson"
+	"io"
 	"os"
 )
 
 type Context struct {
-	header  *Header
-	body    *map[string]any
-	content string
-	count   int
+	header      *Header
+	body        map[string]any
+	content     string
+	count       int
+	maxTurns    int
+	allowOutput bool
+	output      io.Writer
 }
 
 type Header struct {
@@ -21,27 +25,19 @@ type Header struct {
 
 func NewContext() *Context {
 	return &Context{
-		body: &map[string]any{
+		body: map[string]any{
 			"model":    "gpt-3.5-turbo",
 			"messages": []map[string]string{},
+			"stream":   false,
 		},
-		count: 0,
+		count:       0,
+		maxTurns:    1,
+		output:      os.Stdout,
+		allowOutput: true,
 	}
 }
 
-func (c *Context) SetHeader(header *Header) *Context {
-	c.header = header
-	return c
-}
-
-func (c *Context) SetBody(opt map[string]any) *Context {
-	for k, v := range opt {
-		(*c.body)[k] = v
-	}
-	return c
-}
-
-func (c *Context) Post() {
+func (c *Context) post() {
 	c.count++
 	res, err := req.C().R().
 		SetHeader("Content-Type", "application/json").
@@ -49,18 +45,31 @@ func (c *Context) Post() {
 		SetBody(c.body).
 		Post(c.header.Url)
 	checkErr(err)
-	c.content = getContent(res.String())
-	c.appendMessage("assistant", c.content)
+	if !c.allowOutput {
+		c.discardOutput()
+	}
+	if !c.body["stream"].(bool) {
+		// fmt.Println("defaultOutput: ")
+		c.defaultOutput(res)
+	} else {
+		// fmt.Println("streamOutput: ")
+		c.streamOutput(res)
+	}
 }
 
-func (c *Context) Continue(prompt string) {
+func (c *Context) Continue(prompt string) *Context {
+	if c.count >= c.maxTurns {
+		c.body["message"] = []map[string]string{}
+		c.count = 0
+	}
 	c.appendMessage("user", prompt)
-	c.Post()
+	c.post()
+	return c
 }
 
 func (c *Context) GetContent() string {
 	if len(c.content) == 0 {
-		c.Post()
+		c.post()
 	}
 	if len(c.content) == 0 {
 		fmt.Println("请求失败")
@@ -69,25 +78,27 @@ func (c *Context) GetContent() string {
 	return c.content
 }
 
-func (c *Context) SetSystemPrompt(prompt string) *Context {
-	c.appendMessage("system", prompt)
-	return c
-}
-
 func (c *Context) appendMessage(role string, content string) {
-	(*c.body)["messages"] =
-		append((*c.body)["messages"].([]map[string]string), map[string]string{
+	c.body["messages"] =
+		append(c.body["messages"].([]map[string]string), map[string]string{
 			"role":    role,
 			"content": content,
 		})
 }
 
-func getContent(s string) string {
-	return gjson.Get(s, "choices.0.message.content").String()
+func (c *Context) discardOutput() {
+	c.output = io.Discard
+}
+
+func (c *Context) defaultOutput(res *req.Response) {
+	c.content = gjson.Get(res.String(), "choices.0.message.content").String()
+	c.appendMessage("assistant", c.content)
+	fmt.Fprintln(c.output, c.content)
 }
 
 func checkErr(err error) {
 	if err != nil {
-		panic(err)
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(0)
 	}
 }

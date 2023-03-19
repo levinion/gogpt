@@ -1,11 +1,14 @@
 package gogpt
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/imroc/req/v3"
-	"github.com/tidwall/gjson"
 	"io"
+	"net/http"
 	"os"
+
+	"github.com/tidwall/gjson"
 )
 
 type Context struct {
@@ -39,12 +42,24 @@ func NewContext() *Context {
 
 func (c *Context) post() {
 	c.count++
-	res, err := req.C().R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Authorization", c.header.Auth).
-		SetBody(c.body).
-		Post(c.header.Url)
+	client := &http.Client{}
+	jsonData, err := json.Marshal(c.body)
 	checkErr(err)
+	body := bytes.NewBuffer(jsonData)
+	req, err := http.NewRequest("POST", c.header.Url, body)
+	checkErr(err)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", c.header.Auth)
+	if c.body["stream"].(bool) {
+		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("Cache-Control", "no-cache")
+		req.Header.Set("Connection", "keep-alive")
+	}
+
+	res, err := client.Do(req)
+	checkErr(err)
+	defer res.Body.Close()
 	if !c.allowOutput {
 		c.discardOutput()
 	}
@@ -90,8 +105,10 @@ func (c *Context) discardOutput() {
 	c.output = io.Discard
 }
 
-func (c *Context) defaultOutput(res *req.Response) {
-	c.content = gjson.Get(res.String(), "choices.0.message.content").String()
+func (c *Context) defaultOutput(res *http.Response) {
+	content, err := io.ReadAll(res.Body)
+	checkErr(err)
+	c.content = gjson.Get(string(content), "choices.0.message.content").String()
 	c.appendMessage("assistant", c.content)
 	fmt.Fprintln(c.output, c.content)
 }

@@ -43,3 +43,8 @@ func (c *Context) DiscardOutput() *Context {
 	c.allowOutput = false
 	return c
 }
+
+func (c *Context) SetModel(model string) *Context{
+	c.body["model"]=model
+	return c
+}

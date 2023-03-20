@@ -19,6 +19,7 @@ type Context struct {
 	maxTurns    int
 	allowOutput bool
 	output      io.Writer
+	done        bool
 }
 
 type Header struct {
@@ -37,6 +38,7 @@ func NewContext() *Context {
 		maxTurns:    1,
 		output:      os.Stdout,
 		allowOutput: true,
+		done:        true,
 	}
 }
 
@@ -58,6 +60,7 @@ func (c *Context) post() {
 	}
 
 	res, err := client.Do(req)
+	c.done = false
 	checkErr(err)
 	defer res.Body.Close()
 	if !c.allowOutput {
@@ -111,6 +114,11 @@ func (c *Context) defaultOutput(res *http.Response) {
 	c.content = gjson.Get(string(content), "choices.0.message.content").String()
 	c.appendMessage("assistant", c.content)
 	fmt.Fprintln(c.output, c.content)
+	c.done = true
+}
+
+func (c *Context) Done() bool {
+	return c.done
 }
 
 func checkErr(err error) {

@@ -27,4 +27,5 @@ func (c *Context) streamOutput(res *http.Response) {
 	writer.Write([]byte{'\n'})
 	c.appendMessage("assistant", buf.String())
 	c.content = buf.String()
+	c.done=true
 }

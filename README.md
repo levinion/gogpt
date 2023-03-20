@@ -42,7 +42,7 @@ package main
 
 import (
 	"os"
-	"github.com/levinion/gogpt/gogpt"
+	"github.com/levinion/gogpt"
 )
 
 func main(){

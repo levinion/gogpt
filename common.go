@@ -33,7 +33,11 @@ func (c *Context) query() *http.Response {
 
 func (c *Context) checkAndReset() {
 	if c.count >= c.maxTurns {
-		c.body["messages"] = []map[string]string{}
-		c.count = 0
+		c.Clear()
 	}
+}
+
+func (c *Context) Clear(){
+	c.body["messages"] = []map[string]string{}
+	c.count = 0
 }
